@@ -1,0 +1,4 @@
+services:
+  gsa_feed.feed_client:
+    class: \Drupal\gsa_feed\Service\FeedClient
+    arguments: ['@http_client', '@config.factory', '@logger.factory', '@request_stack']

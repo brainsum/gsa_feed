@@ -1,0 +1,5 @@
+name: Google Search Appliance Feeds
+type: module
+description: Provides a feed to be used by GSA.
+core: 8.x
+package: Feeds

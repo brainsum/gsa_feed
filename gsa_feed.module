@@ -1,0 +1,155 @@
+<?php
+
+/**
+ * @file
+ * GSA Feed module.
+ */
+
+use Drupal\Component\Utility\Html;
+use Drupal\Core\Entity\EntityInterface;
+use Drupal\Core\Template\Attribute;
+use Drupal\Core\Url;
+use Drupal\gsa_feed\Service\FeedClient;
+
+/**
+ * Implements hook_theme().
+ */
+function gsa_feed_theme() {
+  $themes = [];
+  $themes['views_view_gsa_rss'] = [
+    'template' => 'views-view-gsa-rss',
+  ];
+  $themes['views_view_row_gsa_rss'] = [
+    'template' => 'views-view-row-gsa-rss',
+  ];
+  return $themes;
+}
+
+/**
+ * Prepares variables for RSS feed templates.
+ *
+ * Default template: views-view-rss.html.twig.
+ *
+ * @param array $variables
+ *   An associative array containing:
+ *   - view: A ViewExecutable object.
+ *   - rows: The raw row data.
+ */
+function template_preprocess_views_view_gsa_rss(array &$variables) {
+  $view = $variables['view'];
+  $items = $variables['rows'];
+  $style = $view->style_plugin;
+
+  $config = \Drupal::config('system.site');
+
+  // The RSS 2.0 "spec" doesn't indicate HTML can be used in the description.
+  // We strip all HTML tags, but need to prevent double encoding from properly
+  // escaped source data (such as &amp becoming &amp;amp;).
+  $variables['description'] = Html::decodeEntities(strip_tags($style->getDescription()));
+
+  if ($view->display_handler->getOption('sitename_title')) {
+    $title = $config->get('name');
+    if ($slogan = $config->get('slogan')) {
+      $title .= ' - ' . $slogan;
+    }
+  }
+  else {
+    $title = $view->getTitle();
+  }
+  $variables['title'] = $title;
+
+  // Figure out which display has a path we're using for this feed. If
+  // there isn't one, use the global $base_url.
+  $link_display_id = $view->display_handler->getLinkDisplay();
+  if ($link_display_id && NULL !== $view->displayHandlers->get($link_display_id)) {
+    $url = $view->getUrl(NULL, $link_display_id);
+  }
+
+  /** @var \Drupal\Core\Url $url */
+  if ($url) {
+    $url_options = ['absolute' => TRUE];
+    if (!empty($view->exposed_raw_input)) {
+      $url_options['query'] = $view->exposed_raw_input;
+    }
+
+    // Compare the link to the default home page; if it's the default home page,
+    // just use $base_url.
+    $url_string = $url->setOptions($url_options)->toString();
+    if ($url_string === Url::fromUserInput($config->get('page.front'))->toString()) {
+      $url_string = Url::fromRoute('<front>')->setAbsolute()->toString();
+    }
+
+    $variables['link'] = $url_string;
+  }
+
+  $variables['langcode'] = \Drupal::languageManager()->getCurrentLanguage()->getId();
+  $variables['namespaces'] = new Attribute($style->namespaces);
+  $variables['items'] = $items;
+  $variables['channel_elements'] = \Drupal::service('renderer')->render($style->channel_elements);
+
+  // During live preview we don't want to output the header since the contents
+  // of the feed are being displayed inside a normal HTML page.
+  if (empty($variables['view']->live_preview)) {
+    $variables['view']->getResponse()->headers->set('Content-Type', 'application/rss+xml; charset=utf-8');
+  }
+}
+
+/**
+ * Prepares variables for views RSS item templates.
+ *
+ * Default template: views-view-row-rss.html.twig.
+ *
+ * @param array $variables
+ *   An associative array containing:
+ *   - row: The raw results rows.
+ */
+function template_preprocess_views_view_row_gsa_rss(array &$variables) {
+  $item = $variables['row'];
+  $variables['title'] = $item->title;
+  $variables['link'] = $item->link;
+
+  // The description is the only place where we should find HTML.
+  // @see https://validator.w3.org/feed/docs/rss2.html#hrelementsOfLtitemgt
+  // If we have a render array, render it here and pass the result to the
+  // template, letting Twig autoescape it.
+  if (isset($item->description) && is_array($item->description)) {
+    $variables['description'] = (string) \Drupal::service('renderer')->render($item->description);
+  }
+
+  $variables['item_elements'] = [];
+  foreach ($item->elements as $element) {
+    if (isset($element['attributes']) && is_array($element['attributes'])) {
+      $element['attributes'] = new Attribute($element['attributes']);
+    }
+    $variables['item_elements'][] = $element;
+  }
+}
+
+/**
+ * Implements hook_entity_insert().
+ */
+function gsa_feed_insert(EntityInterface $entity) {
+  /** @var \Drupal\gsa_feed\Service\FeedClient $service */
+  $service = \Drupal::service('gsa_feed.feed_client');
+  $service->pushHandler($entity, FeedClient::FEED_ACTION_ADD);
+}
+
+/**
+ * Implements hook_entity_delete().
+ */
+function gsa_feed_entity_delete(EntityInterface $entity) {
+  /** @var \Drupal\gsa_feed\Service\FeedClient $service */
+  $service = \Drupal::service('gsa_feed.feed_client');
+  $service->pushHandler($entity, FeedClient::FEED_ACTION_DELETE);
+}
+
+/**
+ * Implements hook_entity_update().
+ */
+function gsa_feed_entity_update(EntityInterface $entity) {
+  // @todo: SEO url change listener.
+  // @todo: Make it so this hook runs after the pathauto module hooks.
+  /** @var \Drupal\gsa_feed\Service\FeedClient $service */
+  $service = \Drupal::service('gsa_feed.feed_client');
+  $service->pushHandler($entity, FeedClient::FEED_ACTION_ADD);
+}

@@ -1,0 +1,31 @@
+{#
+/**
+ * @file
+ * Theme override to display an item in a views RSS feed.
+ *
+ * Available variables:
+ * - title: RSS item title.
+ * - link: RSS item link.
+ * - description: RSS body text.
+ * - item_elements: RSS item elements to be rendered as XML (pubDate, creator,
+ *   guid).
+ *
+ * @see template_preprocess_views_view_row_gsa_rss()
+ */
+#}
+{# @todo: fix mimetype #}
+<record url="{{ link }}" mimetype="text/html">
+    <content>
+        {{ description }}
+    </content>
+    {#<title>{{ title }}</title>#}
+    {#<description>{{ description }}</description>#}
+    {#{% for item in item_elements -%}#}
+        {#<{{ item.key }}{{ item.attributes -}}#}
+        {#{% if item.value -%}#}
+        {#>{{ item.value }}</{{ item.key }}>#}
+        {#{% else -%}#}
+            {#{{ ' />' }}#}
+        {#{% endif %}#}
+    {#{%- endfor %}#}
+</record>
